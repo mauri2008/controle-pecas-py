@@ -15,6 +15,9 @@ st.set_page_config(
     layout="wide",
 )
 
+# Mapeamento de classes
+classes = {0: "Aprovada", 1: "Retrabalho", 2: "Refugo"}
+
 
 # 1. Gerador e Treinador de Modelo (com cache para não re-treinar a cada interação)
 @st.cache_data
@@ -30,21 +33,22 @@ def treinar_modelo_svm():
         random_state=42,
     )
 
-    # Converter para DataFrame para ajustar escala realista de peças usinadas
-    # Peso em gramas (~150g a ~250g) e Espessura em mm (~10mm a ~20mm)
+    # Converter para DataFrame e ajustar escala realista de peças usinadas
     df = pd.DataFrame(X, columns=["Peso_gramas", "Espessura_mm"])
     df["Peso_gramas"] = (df["Peso_gramas"] * 15) + 200
     df["Espessura_mm"] = (df["Espessura_mm"] * 2.5) + 15
+    df["Classe_ID"] = y
+    df["Status"] = df["Classe_ID"].map(classes)
 
     # Divisão em Treino e Teste
     X_train, X_test, y_train, y_test = train_test_split(
         df[["Peso_gramas", "Espessura_mm"]],
-        y,
+        df["Classe_ID"],
         test_size=0.25,
         random_state=42,
     )
 
-    # Treinamento do Modelo SVM (Kernel RBF com probabilidade ativada)
+    # Treinamento do Modelo SVM (Kernel RBF)
     modelo = SVC(kernel="rbf", C=1.0, probability=True, random_state=42)
     modelo.fit(X_train, y_train)
 
@@ -58,9 +62,6 @@ def treinar_modelo_svm():
 # Executa o carregamento dos dados e treino do modelo
 modelo, cm, df_dados = treinar_modelo_svm()
 
-# Mapeamento de classes
-classes = {0: "Aprovada", 1: "Retrabalho", 2: "Refugo"}
-
 # Interface Streamlit
 st.title("⚙️ Controle de Qualidade de Peças - Usinagem")
 st.markdown(
@@ -71,7 +72,7 @@ st.divider()
 
 col_esq, col_dir = st.columns([1, 1], gap="large")
 
-# --- COLUNA ESQUERDA: Formulario do Inspetor ---
+# --- COLUNA ESQUERDA: Formulário do Inspetor ---
 with col_esq:
     st.subheader("🔍 Inspeção de Peça")
     st.write("Ajuste os valores medidos na peça para realizar a avaliação:")
@@ -121,7 +122,7 @@ with col_dir:
 
     labels_classes = ["Aprovada", "Retrabalho", "Refugo"]
 
-    # Plotagem da Matriz de Confusão usando Seaborn/Matplotlib
+    # Plotagem da Matriz de Confusão
     fig, ax = plt.subplots(figsize=(6, 4))
     sns.heatmap(
         cm,
@@ -137,3 +138,23 @@ with col_dir:
     ax.set_title("Matriz de Confusão")
 
     st.pyplot(fig)
+
+st.divider()
+
+# --- NOVA SEÇÃO: Exibição do DataFrame Sintético ---
+st.subheader("📋 Base de Dados Sintética do Treinamento")
+
+tab1, tab2 = st.tabs(["📄 Tabela de Dados", "📈 Resumo Estatístico"])
+
+with tab1:
+    st.dataframe(
+        df_dados[["Peso_gramas", "Espessura_mm", "Status"]],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+with tab2:
+    st.dataframe(
+        df_dados[["Peso_gramas", "Espessura_mm"]].describe(),
+        use_container_width=True,
+    )
